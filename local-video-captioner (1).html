@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Local Video Captioner — Whisper in your browser</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --bg: #14110F;
+    --surface: #1E1A17;
+    --surface-2: #262019;
+    --line: #352C24;
+    --amber: #E8A33D;
+    --amber-dim: #7A5C2A;
+    --text: #F2EDE4;
+    --text-muted: #9A8F82;
+    --green: #6FBF73;
+    --red: #D9756B;
+  }
+
+  *{ box-sizing: border-box; }
+  html{ scrollbar-color: var(--amber-dim) var(--bg); }
+
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 48px 20px 80px;
+  }
+
+  .sprocket-rule{
+    height: 14px;
+    width: 100%;
+    background-image: radial-gradient(circle, var(--line) 2.5px, transparent 2.6px);
+    background-size: 22px 14px;
+    background-position: center;
+    opacity: 0.9;
+    margin: 36px 0;
+  }
+
+  .container{
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  header{
+    text-align: left;
+    margin-bottom: 8px;
+  }
+
+  .eyebrow{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin: 0 0 10px;
+  }
+
+  h1{
+    font-family: 'Fraunces', serif;
+    font-optical-sizing: auto;
+    font-weight: 600;
+    font-size: clamp(32px, 5vw, 46px);
+    line-height: 1.05;
+    margin: 0 0 14px;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle{
+    color: var(--text-muted);
+    font-size: 16px;
+    line-height: 1.55;
+    max-width: 54ch;
+    margin: 0;
+  }
+
+  .card{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 28px;
+    margin-top: 28px;
+  }
+
+  .drop-zone{
+    border: 1.5px dashed var(--line);
+    border-radius: 8px;
+    padding: 36px 20px;
+    text-align: center;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .drop-zone.dragover{
+    border-color: var(--amber);
+    background: rgba(232,163,61,0.06);
+  }
+
+  .btn{
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 11px 22px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    background: var(--amber);
+    color: #1A140A;
+    transition: transform 0.1s ease, background 0.15s ease, opacity 0.15s ease;
+  }
+  .btn:hover:not(:disabled){ background: #f0b458; }
+  .btn:active:not(:disabled){ transform: scale(0.98); }
+  .btn:disabled{ opacity: 0.4; cursor: not-allowed; }
+  .btn:focus-visible{ outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  .btn-secondary{
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text);
+  }
+  .btn-secondary:hover:not(:disabled){ border-color: var(--amber); color: var(--amber); background: transparent; }
+
+  #fileName{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 14px 0 0;
+    word-break: break-all;
+  }
+
+  .controls-row{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+
+  label.model-label{
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  select{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  select:focus-visible{ outline: 2px solid var(--amber); outline-offset: 1px; }
+
+  #status{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 18px;
+    min-height: 18px;
+  }
+  #status.working::before{
+    content: '● ';
+    color: var(--amber);
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+  #status.done::before{ content: '● '; color: var(--green); }
+  #status.error::before{ content: '● '; color: var(--red); }
+
+  @keyframes pulse{
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
+
+  #progressWrap{
+    margin-top: 12px;
+    display: none;
+  }
+  .progress-track{
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .progress-fill{
+    height: 100%;
+    width: 0%;
+    background: var(--amber);
+    transition: width 0.2s ease;
+  }
+  .progress-label{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .video-wrap{
+    margin-top: 28px;
+    display: none;
+  }
+  .film-edge{
+    height: 16px;
+    background-image: radial-gradient(circle, var(--surface) 2.5px, var(--bg) 2.6px);
+    background-size: 20px 16px;
+    background-color: #000;
+  }
+  .video-frame{
+    background: #000;
+    padding: 0;
+    position: relative;
+  }
+  video{
+    width: 100%;
+    display: block;
+    background: #000;
+    max-height: 60vh;
+  }
+  #captionOverlay{
+    position: absolute;
+    bottom: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 88%;
+    text-align: center;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: clamp(14px, 2.4vw, 20px);
+    color: #fff;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.9);
+    line-height: 1.35;
+    pointer-events: none;
+    padding: 2px 10px;
+  }
+
+  .download-row{
+    display: none;
+    gap: 12px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+
+  .note{
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin-top: 22px;
+    line-height: 1.6;
+  }
+  .note code{
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    #status.working::before{ animation: none; }
+    .btn{ transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <p class="eyebrow">Reel · Local transcription</p>
+    <h1>Local Video Captioner</h1>
+    <p class="subtitle">Drop in a video and Whisper transcribes it right here, in your browser tab. Nothing leaves your machine — no upload, no server.</p>
+  </header>
+
+  <div class="card">
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="videoInput" accept="video/*" hidden>
+      <button class="btn" id="chooseBtn" type="button">Choose a video file</button>
+      <p id="fileName">or drag one in here</p>
+    </div>
+
+    <div class="controls-row">
+      <label class="model-label" for="modelSelect">
+        Model
+        <select id="modelSelect">
+          <option value="Xenova/whisper-tiny.en">Tiny · fastest, English</option>
+          <option value="Xenova/whisper-base.en" selected>Base · balanced, English</option>
+          <option value="Xenova/whisper-small.en">Small · more accurate, slower</option>
+        </select>
+      </label>
+      <button class="btn" id="generateBtn" disabled>Generate captions</button>
+    </div>
+
+    <p id="status"></p>
+    <div id="progressWrap">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <p class="progress-label"><span id="progressText">—</span><span id="progressPct"></span></p>
+    </div>
+  </div>
+
+  <div class="video-wrap" id="videoWrap">
+    <div class="film-edge"></div>
+    <div class="video-frame">
+      <video id="video" controls></video>
+      <div id="captionOverlay"></div>
+    </div>
+    <div class="film-edge"></div>
+
+    <div class="download-row" id="downloadRow">
+      <button class="btn btn-secondary" id="downloadVtt">Download .vtt</button>
+      <button class="btn btn-secondary" id="downloadSrt">Download .srt</button>
+    </div>
+  </div>
+
+  <p class="note">
+    Runs entirely client-side using <code>@xenova/transformers</code> (Whisper, WASM). The first run downloads
+    the model to your browser cache (40–250 MB depending on size), so it takes a minute the first time and is
+    fast after that. Audio is extracted from your video's audio track directly in the browser — very unusual
+    codecs may fail to decode. If this page's preview sandbox blocks the model download, save this file and
+    open it directly in your browser instead.
+  </p>
+
+  <div class="sprocket-rule"></div>
+</div>
+
+<script type="module">
+const CDN_URLS = [
+  'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2',
+  'https://unpkg.com/@xenova/transformers@2.17.2'
+];
+
+let pipeline, env;
+async function loadLibrary(){
+  let lastErr;
+  for (const url of CDN_URLS){
+    try{
+      const mod = await import(/* @vite-ignore */ url);
+      return mod;
+    } catch (err){
+      lastErr = err;
+      console.warn('Failed to load from', url, err);
+    }
+  }
+  throw new Error(
+    'Could not load the Whisper library from any CDN. This usually means either there is no ' +
+    'internet connection reaching cdn.jsdelivr.net / unpkg.com right now, or the page is running ' +
+    'inside a sandboxed preview that blocks outside scripts. Try saving this file to your computer ' +
+    'and opening it directly in a browser (double-click it), rather than viewing it in a preview pane.'
+  );
+}
+
+const dropZone = document.getElementById('dropZone');
+const videoInput = document.getElementById('videoInput');
+const chooseBtn = document.getElementById('chooseBtn');
+const fileNameEl = document.getElementById('fileName');
+const generateBtn = document.getElementById('generateBtn');
+const modelSelect = document.getElementById('modelSelect');
+const statusEl = document.getElementById('status');
+const progressWrap = document.getElementById('progressWrap');
+const progressFill = document.getElementById('progressFill');
+const progressText = document.getElementById('progressText');
+const progressPct = document.getElementById('progressPct');
+const videoWrap = document.getElementById('videoWrap');
+const video = document.getElementById('video');
+const captionOverlay = document.getElementById('captionOverlay');
+const downloadRow = document.getElementById('downloadRow');
+const downloadVttBtn = document.getElementById('downloadVtt');
+const downloadSrtBtn = document.getElementById('downloadSrt');
+
+let currentFile = null;
+let chunks = []; // {start, end, text}
+let vttUrl = null;
+let srtUrl = null;
+
+function setStatus(text, kind){
+  statusEl.textContent = text;
+  statusEl.className = kind || '';
+}
+
+function handleFile(file){
+  if (!file || !file.type.startsWith('video/')){
+    setStatus('Please choose a video file.', 'error');
+    return;
+  }
+  currentFile = file;
+  fileNameEl.textContent = file.name;
+  video.src = URL.createObjectURL(file);
+  videoWrap.style.display = 'block';
+  downloadRow.style.display = 'none';
+  captionOverlay.textContent = '';
+  chunks = [];
+  generateBtn.disabled = false;
+  setStatus('');
+}
+
+chooseBtn.addEventListener('click', () => videoInput.click());
+videoInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+['dragover','dragenter'].forEach(evt =>
+  dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); })
+);
+['dragleave','drop'].forEach(evt =>
+  dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); })
+);
+dropZone.addEventListener('drop', (e) => {
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+async function resampleTo16k(audioBuffer){
+  const targetRate = 16000;
+  const offline = new OfflineAudioContext(1, Math.ceil(audioBuffer.duration * targetRate), targetRate);
+  const src = offline.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(offline.destination);
+  src.start(0);
+  const rendered = await offline.startRendering();
+  return rendered.getChannelData(0);
+}
+
+// Fast path: decode the whole file's audio track directly.
+async function decodeViaDecodeAudioData(file){
+  const arrayBuffer = await file.arrayBuffer();
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  try{
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    const data = await resampleTo16k(decoded);
+    return { data, duration: decoded.duration };
+  } finally {
+    audioCtx.close();
+  }
+}
+
+// Fallback path: some containers/codecs can't be decoded by decodeAudioData directly
+// (this varies a lot by browser). Instead, play the video in real time, muted, and
+// capture its audio samples through the Web Audio graph as it plays.
+function decodeViaPlaybackCapture(file, onProgress){
+  return new Promise((resolve, reject) => {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const tempVideo = document.createElement('video');
+    tempVideo.src = URL.createObjectURL(file);
+    tempVideo.muted = true;
+    tempVideo.playsInline = true;
+    tempVideo.style.position = 'fixed';
+    tempVideo.style.left = '-9999px';
+    document.body.appendChild(tempVideo);
+
+    const cleanup = () => {
+      tempVideo.pause();
+      URL.revokeObjectURL(tempVideo.src);
+      tempVideo.remove();
+    };
+
+    tempVideo.addEventListener('error', () => {
+      cleanup();
+      audioCtx.close();
+      reject(new Error('This video\'s audio track could not be read by the browser at all (unsupported codec/container).'));
+    }, { once: true });
+
+    tempVideo.addEventListener('loadedmetadata', () => {
+      const duration = tempVideo.duration || 0;
+      let source, processor, silentGain;
+      try{
+        source = audioCtx.createMediaElementSource(tempVideo);
+        processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        silentGain = audioCtx.createGain();
+        silentGain.gain.value = 0;
+      } catch (err){
+        cleanup();
+        audioCtx.close();
+        reject(new Error('This browser could not set up audio capture for this video.'));
+        return;
+      }
+
+      const buffers = [];
+      processor.onaudioprocess = (e) => {
+        buffers.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+        if (onProgress && duration) onProgress(Math.min(100, (tempVideo.currentTime / duration) * 100));
+      };
+
+      source.connect(processor);
+      processor.connect(silentGain);
+      silentGain.connect(audioCtx.destination);
+
+      tempVideo.addEventListener('ended', async () => {
+        try{
+          processor.disconnect();
+          source.disconnect();
+          const totalLength = buffers.reduce((a, b) => a + b.length, 0);
+          const merged = new Float32Array(totalLength);
+          let offset = 0;
+          for (const b of buffers){ merged.set(b, offset); offset += b.length; }
+          const nativeBuffer = audioCtx.createBuffer(1, merged.length || 1, audioCtx.sampleRate);
+          nativeBuffer.copyToChannel(merged, 0);
+          const data = await resampleTo16k(nativeBuffer);
+          cleanup();
+          audioCtx.close();
+          resolve({ data, duration });
+        } catch (err){
+          cleanup();
+          audioCtx.close();
+          reject(err);
+        }
+      }, { once: true });
+
+      tempVideo.play().catch((err) => {
+        cleanup();
+        audioCtx.close();
+        reject(new Error('Playback could not start for audio capture (browser blocked autoplay): ' + err.message));
+      });
+    }, { once: true });
+  });
+}
+
+async function decodeToMono16k(file, onFallbackProgress){
+  try{
+    return await decodeViaDecodeAudioData(file);
+  } catch (err){
+    console.warn('decodeAudioData failed, falling back to real-time playback capture:', err);
+    return await decodeViaPlaybackCapture(file, onFallbackProgress);
+  }
+}
+
+function formatTime(seconds, useComma){
+  seconds = Math.max(0, seconds);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const ms = Math.round((seconds - Math.floor(seconds)) * 1000);
+  const pad = (n, len = 2) => String(n).padStart(len, '0');
+  const sep = useComma ? ',' : '.';
+  return `${pad(h)}:${pad(m)}:${pad(s)}${sep}${pad(ms, 3)}`;
+}
+
+function buildVTT(caps){
+  let out = 'WEBVTT\n\n';
+  caps.forEach((c) => {
+    out += `${formatTime(c.start)} --> ${formatTime(c.end)}\n${c.text}\n\n`;
+  });
+  return out;
+}
+
+function buildSRT(caps){
+  let out = '';
+  caps.forEach((c, i) => {
+    out += `${i + 1}\n${formatTime(c.start, true)} --> ${formatTime(c.end, true)}\n${c.text}\n\n`;
+  });
+  return out;
+}
+
+function makeDownloadUrl(text, mime){
+  return URL.createObjectURL(new Blob([text], { type: mime }));
+}
+
+generateBtn.addEventListener('click', async () => {
+  if (!currentFile) return;
+  generateBtn.disabled = true;
+  chooseBtn.disabled = true;
+  modelSelect.disabled = true;
+  downloadRow.style.display = 'none';
+  progressWrap.style.display = 'block';
+  progressFill.style.width = '0%';
+
+  try{
+    if (!pipeline){
+      setStatus('Loading transcription library…', 'working');
+      ({ pipeline, env } = await loadLibrary());
+      env.allowLocalModels = false;
+    }
+
+    setStatus('Decoding audio track…', 'working');
+    const { data: audioData, duration } = await decodeToMono16k(currentFile, (pct) => {
+      progressFill.style.width = `${pct}%`;
+      progressText.textContent = 'Capturing audio during real-time playback (fallback mode)';
+      progressPct.textContent = `${pct.toFixed(0)}%`;
+    });
+
+    setStatus('Loading Whisper model…', 'working');
+    progressFill.style.width = '0%';
+    const modelId = modelSelect.value;
+    const loadedFiles = {};
+    const transcriber = await pipeline('automatic-speech-recognition', modelId, {
+      progress_callback: (info) => {
+        if (info.status === 'progress'){
+          loadedFiles[info.file] = info.progress || 0;
+          const values = Object.values(loadedFiles);
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          progressFill.style.width = `${avg}%`;
+          progressText.textContent = info.file;
+          progressPct.textContent = `${avg.toFixed(0)}%`;
+        } else if (info.status === 'done'){
+          progressText.textContent = `${info.file} ready`;
+        }
+      }
+    });
+
+    setStatus('Transcribing… this can take a while for long videos', 'working');
+    progressFill.style.width = '0%';
+    progressText.textContent = 'Running speech recognition';
+    progressPct.textContent = '';
+
+    const output = await transcriber(audioData, {
+      chunk_length_s: 30,
+      stride_length_s: 5,
+      return_timestamps: true,
+    });
+
+    const rawChunks = output.chunks && output.chunks.length ? output.chunks : [
+      { text: output.text, timestamp: [0, duration] }
+    ];
+
+    chunks = rawChunks.map((c, i) => {
+      const start = c.timestamp && c.timestamp[0] != null ? c.timestamp[0] : 0;
+      let end = c.timestamp && c.timestamp[1] != null ? c.timestamp[1] : null;
+      if (end == null){
+        end = (rawChunks[i + 1] && rawChunks[i + 1].timestamp && rawChunks[i + 1].timestamp[0] != null)
+          ? rawChunks[i + 1].timestamp[0]
+          : duration;
+      }
+      return { start, end, text: c.text.trim() };
+    }).filter(c => c.text.length > 0);
+
+    const vttText = buildVTT(chunks);
+    const srtText = buildSRT(chunks);
+    if (vttUrl) URL.revokeObjectURL(vttUrl);
+    if (srtUrl) URL.revokeObjectURL(srtUrl);
+    vttUrl = makeDownloadUrl(vttText, 'text/vtt');
+    srtUrl = makeDownloadUrl(srtText, 'text/srt');
+
+    // Replace any existing track, add fresh one
+    Array.from(video.querySelectorAll('track')).forEach(t => t.remove());
+    const track = document.createElement('track');
+    track.kind = 'subtitles';
+    track.label = 'English';
+    track.srclang = 'en';
+    track.default = true;
+    track.src = vttUrl;
+    video.appendChild(track);
+
+    downloadRow.style.display = 'flex';
+    progressWrap.style.display = 'none';
+    setStatus(`Done — ${chunks.length} caption line${chunks.length === 1 ? '' : 's'} generated.`, 'done');
+  } catch (err){
+    console.error(err);
+    progressWrap.style.display = 'none';
+    setStatus(`Something went wrong: ${err.message || err}`, 'error');
+  } finally {
+    generateBtn.disabled = false;
+    chooseBtn.disabled = false;
+    modelSelect.disabled = false;
+  }
+});
+
+// Manual overlay sync (works regardless of native <track> cue rendering)
+video.addEventListener('timeupdate', () => {
+  if (!chunks.length) { captionOverlay.textContent = ''; return; }
+  const t = video.currentTime;
+  const current = chunks.find(c => t >= c.start && t <= c.end);
+  captionOverlay.textContent = current ? current.text : '';
+});
+
+downloadVttBtn.addEventListener('click', () => {
+  if (!vttUrl) return;
+  const a = document.createElement('a');
+  a.href = vttUrl;
+  a.download = (currentFile ? currentFile.name.replace(/\.[^.]+$/, '') : 'captions') + '.vtt';
+  a.click();
+});
+
+downloadSrtBtn.addEventListener('click', () => {
+  if (!srtUrl) return;
+  const a = document.createElement('a');
+  a.href = srtUrl;
+  a.download = (currentFile ? currentFile.name.replace(/\.[^.]+$/, '') : 'captions') + '.srt';
+  a.click();
+});
+</script>
+</body>
+</html>
